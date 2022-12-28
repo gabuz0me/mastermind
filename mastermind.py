@@ -68,34 +68,67 @@ class Mastermind:
         nb = 1
         # print(str(self.mastermind._secret))
         while True:
+            # Showing gameboard
             self.displayer.show()
+
+            # Finish if lost
             if nb > self.mastermind.nb_guess:
-                print(f"Answer was : {self.mastermind.secret}")
+                print(self.displayer.colored('B', f"You lost!\nAnswer:    {self.displayer.secret}"))
                 break
-            guess = input(" > ").strip().upper().replace(' ', '')
+
+            # Input and intercept user breaking
+            try:
+                guess = input(" > ").strip().upper().replace(' ', '')
+            except KeyboardInterrupt:
+                print(self.displayer.colored('B', f"\nAnswer:    {self.displayer.secret}"))
+                break
+
+            # Check for invalid guess size
             if (len(guess) != len(self.mastermind._secret)):
-                print("Invalid guess size!")
+                print(self.displayer.colored(
+                    'R',
+                    f"Invalid guess size:{len(guess)} (must be {len(self.mastermind._secret)})"
+                ))
                 continue
+
+            # Check for invalid colors in guess
+            invalid_color = ""
+            for color in guess:
+                if color not in self.mastermind.COLORS:
+                    invalid_color = color
+                    break
+            if invalid_color:
+                print(self.displayer.colored('R', f"Invalid color: {invalid_color}"))
+                continue
+                    
+            # Finish if won
             if self.mastermind.guess(guess):
-                print("Well done!")
+                print(self.displayer.colored('G', "Well done!"))
                 break
+
             nb+=1
         return nb
 
 
 class MastermindDisplayer:
-    COLOR_CODES = {
+    COLOR_CODES_8 = {
+        # https://en.wikipedia.org/wiki/ANSI_escape_code#3-bit_and_4-bit
+        'W' : 97, # bright white
+        'K' : 90, # bright black
+        'R' : 31, # red
+        'G' : 32, # green
+        'B' : 34, # blue
+        'Y' : 93, # bright yellow
+        'O' : 33, # yellow
+        'P' : 95, # bright magenta
+        'START' : '\u001b[',
+        'END'   : ';1m', # ;1 is boldness
+        'RESET' : '\u001b[0m',
+    }
+    COLOR_CODES_256 = {
         # https://en.wikipedia.org/wiki/ANSI_escape_code#8-bit
-        # 'W' : 97, # bright white
-        # 'K' : 90, # bright black
-        # 'R' : 31, # red
-        # 'G' : 32, # green
-        # 'B' : 34, # blue
-        # 'Y' : 93, # bright yellow
-        # 'O' : 33, # yellow
-        # 'P' : 95, # bright magenta
         'W' : 15,
-        'K' : 7,
+        'K' : 238,
         'R' : 1,
         'G' : 2,
         'B' : 12,
@@ -103,46 +136,51 @@ class MastermindDisplayer:
         'O' : 208,
         'P' : 13,
         'START' : '\u001b[38;5;',
-        'END'   : 'm', # ;1 is boldness
+        'END'   : ';1m', # ;1 is boldness
         'RESET' : '\u001b[0m',
     }
 
-    @classmethod
-    def colored(cls, color, msg) -> str:
-        CC = MastermindDisplayer.COLOR_CODES
+    def __init__(self, mastermind:MastermindState, use_colors:bool = False, use_8_color:bool = False) -> None:
+        self.use_colors = use_colors
+        self.mastermind = mastermind
+        self.use_8_colors = use_8_color
+
+    def colored(self, color, msg) -> str:
+        if not self.use_colors:
+            return msg
+        CC = MastermindDisplayer.COLOR_CODES_8 if self.use_8_colors else MastermindDisplayer.COLOR_CODES_256
         if not color in CC:
-            raise TypeError(f'Unknown color {color}')
+            return msg # No coloring
         color_str = CC['START'] + str(CC[color]) + CC['END']
         return color_str + str(msg) + CC['RESET']
-        
-    def __init__(self, mastermind:MastermindState, colors:bool = False) -> None:
-        self.colors = colors
-        self.mastermind = mastermind
+
+    @property
+    def secret(self) -> str:
+        secret = ""
+        for color in self.mastermind._secret:
+            secret += self.colored(color, color)
+            secret += " "
+        return secret[0:-1]
 
     def show(self) -> None:
-        print(f"[##] ! ? < {'| '*len(self.mastermind._secret)}>")
+        _=self.colored
+        print(f"[{_('B','##')}] {_('G','!')} {_('O','?')}   {_('W','| '*len(self.mastermind._secret))}")
         for i in range(len(self.mastermind.guesses)):
             indic = self.mastermind.indications[i]
-            if not self.colors:
-                guess = " ".join(self.mastermind.guesses[i])
-            else:
-                guess = ""
-                for g in self.mastermind.guesses[i]:
-                    guess += MastermindDisplayer.colored(g, g)
-                    guess += " "
+            guess = ""
+            for g in self.mastermind.guesses[i]:
+                guess += self.colored(g, g)
+                guess += " "
             good = '.' if indic.good == 0 else indic.good
+            if indic.good > 0:
+                good = self.colored('G', good)
             wrong = '.' if indic.wrong == 0 else indic.wrong
-            if self.colors:
-                if indic.good > 0:
-                    good = MastermindDisplayer.colored('G', good)
-                if indic.wrong > 0:
-                    wrong = MastermindDisplayer.colored('O', wrong)
-            print(f"[{i+1:2}] {good} {wrong}   {guess}")
+            if indic.wrong > 0:
+                wrong = self.colored('O', wrong)
+            nb = f"{i+1:2}"
+            print(f"[{_('B', nb)}] {good} {wrong}   {guess}")
 
 if __name__ == '__main__':
-    # print("Testing Colors:")
-    # print("\u001b[38;5;3;1m TEST 8-bit \u001b[0m")
-    # print("\u001b[93;1m TEST-ANSI \u001b[0m")
-    # print("")
     mastermind = Mastermind(True)
+    # mastermind.displayer.use_8_colors = True
     mastermind.start()
