@@ -1,16 +1,19 @@
 #!/usr/bin/env python
 
-from random import choices, shuffle
+import argparse
 from collections import namedtuple, defaultdict
-from enum import Enum
-
+from random import choices, shuffle
+from textwrap import dedent
 
 class MastermindState:
     COLORS = ('W', 'K', 'R', 'G', 'B', 'Y', 'O', 'P')
     Answer = namedtuple('Answer', ['good', 'wrong'])
 
     def __init__(self, allow_duplicate = False, nb_color=8, size=5, nb_guess=12) -> None:
-        if (not allow_duplicate and nb_color < size): raise Exception
+        if (not allow_duplicate and nb_color < size):
+            raise Exception("If duplicate colors are not allowed, secret length must not be longer than the number of colors")
+        if (nb_color < 2 or nb_color > len(MastermindState.COLORS)):
+            raise Exception(f"Number of color must be between 2 and {len(MastermindState.COLORS)}")
         self.allow_duplicate = allow_duplicate
         self.nb_color = nb_color
         self.size = size
@@ -31,7 +34,7 @@ class MastermindState:
     @classmethod
     def testGuess(cls, guess:list, secret:list) -> Answer:
         if len(guess) != len(secret):
-            raise Exception
+            raise Exception("Guess length must be secret length")
         color_dict_guess = defaultdict(lambda:0)
         color_dict_secret = defaultdict(lambda:0)
         nb_good = 0
@@ -57,58 +60,6 @@ class MastermindState:
     @property
     def secret(self) -> str:
         return " ".join(self._secret)
-
-
-class Mastermind:
-    def __init__(self, colors:bool = False, allow_duplicate = False, nb_color=8, size=5, nb_guess=12) -> None:
-        self.mastermind = MastermindState(allow_duplicate, nb_color, size, nb_guess)
-        self.displayer = MastermindDisplayer(self.mastermind, colors)
-
-    def start(self) -> int:
-        nb = 1
-        # print(str(self.mastermind._secret))
-        while True:
-            # Showing gameboard
-            self.displayer.show()
-
-            # Finish if lost
-            if nb > self.mastermind.nb_guess:
-                print(self.displayer.colored('B', f"You lost!\nAnswer:    {self.displayer.secret}"))
-                break
-
-            # Input and intercept user breaking
-            try:
-                guess = input(" > ").strip().upper().replace(' ', '')
-            except KeyboardInterrupt:
-                print(self.displayer.colored('B', f"\nAnswer:    {self.displayer.secret}"))
-                break
-
-            # Check for invalid guess size
-            if (len(guess) != len(self.mastermind._secret)):
-                print(self.displayer.colored(
-                    'R',
-                    f"Invalid guess size:{len(guess)} (must be {len(self.mastermind._secret)})"
-                ))
-                continue
-
-            # Check for invalid colors in guess
-            invalid_color = ""
-            for color in guess:
-                if color not in self.mastermind.COLORS:
-                    invalid_color = color
-                    break
-            if invalid_color:
-                print(self.displayer.colored('R', f"Invalid color: {invalid_color}"))
-                continue
-                    
-            # Finish if won
-            if self.mastermind.guess(guess):
-                print(self.displayer.colored('G', "Well done!"))
-                break
-
-            nb+=1
-        return nb
-
 
 class MastermindDisplayer:
     COLOR_CODES_8 = {
@@ -158,9 +109,16 @@ class MastermindDisplayer:
     def secret(self) -> str:
         secret = ""
         for color in self.mastermind._secret:
-            secret += self.colored(color, color)
-            secret += " "
+            secret += self.colored(color, color) + " "
         return secret[0:-1]
+
+    @property
+    def allowed_colors(self) -> str:
+        string = "Allowed colors are:"
+        for i in range(self.mastermind.nb_color):
+            color = self.mastermind.COLORS[i]
+            string += " " + self.colored(color, color)
+        return string
 
     def show(self) -> None:
         _=self.colored
@@ -179,8 +137,111 @@ class MastermindDisplayer:
                 wrong = self.colored('O', wrong)
             nb = f"{i+1:2}"
             print(f"[{_('B', nb)}] {good} {wrong}   {guess}")
+            
+    def start(self) -> int:
+        nb = 1
+        # print(str(self.mastermind._secret))
+        print(self.allowed_colors)
+        while True:
+            # Showing gameboard
+            self.show()
+
+            # Finish if lost
+            if nb > self.mastermind.nb_guess:
+                print(self.colored('B', f"You lost!\nAnswer:    {self.secret}"))
+                break
+
+            # Input and intercept user breaking
+            try:
+                guess = input(" > ").strip().upper().replace(' ', '')
+            except KeyboardInterrupt:
+                print(self.colored('B', f"\nAnswer:    {self.secret}"))
+                break
+
+            # Check for invalid guess size
+            if (len(guess) != len(self.mastermind._secret)):
+                print(self.colored(
+                    'R',
+                    f"Invalid guess size:{len(guess)} (must be {len(self.mastermind._secret)})"
+                ))
+                continue
+
+            # Check for invalid colors in guess
+            invalid_color = ""
+            for color in guess:
+                if color not in self.mastermind.COLORS:
+                    invalid_color = color
+                    break
+            if invalid_color:
+                print(self.colored('R', f"Invalid color: {invalid_color}"))
+                continue
+                    
+            # Finish if won
+            if self.mastermind.guess(guess):
+                print(self.colored('G', "Well done!"))
+                break
+
+            nb+=1
+        return nb
 
 if __name__ == '__main__':
-    mastermind = Mastermind(True)
-    # mastermind.displayer.use_8_colors = True
-    mastermind.start()
+    parser = argparse.ArgumentParser(
+        description=dedent("""\
+            Classic Mastermind in your console!
+            """
+        ),
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser.add_argument(
+        '-s', '--size',
+        help="length of the secret",
+        type=int,
+        default=5,
+    )
+    parser.add_argument(
+        '-c', '--nb-colors',
+        help=f"number of different colors (2-{len(MastermindState.COLORS)})",
+        type=int,
+        default=8,
+    )
+    parser.add_argument(
+        '-g', '--nb-guesses',
+        help="number of guesses",
+        type=int,
+        default=12,
+    )
+    parser.add_argument(
+        '-d', '--duplicate',
+        help="allow duplicate colors in generated secret",
+        action='store_true',
+    )
+    parser.add_argument(
+        '-n', '--no-colors',
+        help="outputs mastermind without color",
+        action='store_true',
+    )
+    parser.add_argument(
+        '-8', '--use-8-colors-mode',
+        help="use 8 colors mode",
+        action='store_true',
+    )
+    args = parser.parse_args()
+    #print(args)
+
+    # Creating the displayer beforehand to express errors in a colored way.
+    displayer = MastermindDisplayer(
+        None,
+        use_colors=not args.no_colors,
+        use_8_color=args.use_8_colors_mode,
+    )
+    try:
+        mastermind = MastermindState(
+            allow_duplicate=args.duplicate,
+            nb_color=args.nb_colors,
+            size=args.size,
+            nb_guess=args.nb_guesses,
+        )
+        displayer.mastermind = mastermind
+        displayer.start()
+    except Exception as e:
+        print(displayer.colored('R', e))
